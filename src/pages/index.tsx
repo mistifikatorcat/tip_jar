@@ -20,72 +20,44 @@ export default function Home() {
   const [tips, setTips] = useState<Tip[]>([]);
   const [msgInput, setMsgInput] = useState("");
 
-  // 1. Connect MetaMask
   const connectWallet = async () => {
-    try {
-      const { ethereum } = window as any;
-      if (!ethereum) {
-        alert("Please install MetaMask");
-        return;
-      }
+    const { ethereum } = window as any;
+    if (!ethereum) return alert("Please install MetaMask");
+    const accounts: string[] = await ethereum.request({ method: "eth_requestAccounts" });
+    if (!accounts[0]) return;
+    const userAddress = accounts[0];
+    setAccount(userAddress);
 
-      // Request the user's accounts
-      const accounts: string[] = await ethereum.request({
-        method: "eth_requestAccounts",
-      });
-      if (accounts.length === 0) {
-        console.log("No accounts found");
-        return;
-      }
-      const userAddress = accounts[0];
-      setAccount(userAddress);
+    const prov = new ethers.BrowserProvider(ethereum, "any");
+    setProvider(prov);
+    const sig = await prov.getSigner(userAddress);
+    setSigner(sig);
 
-      // Create an Ethers provider that doesn't enforce a specific network
-      const prov = new ethers.BrowserProvider(ethereum, "any");
-      setProvider(prov);
-
-      // Explicitly get the signer for that address
-      const sig = await prov.getSigner(userAddress);
-      setSigner(sig);
-
-      // Instantiate the contract with the signer
-      const ctr = new ethers.Contract(TIPJAR_ADDRESS, TIPJAR_ABI, sig);
-      setContract(ctr);
-
-      // Fetch and store the owner address
-      const ownerAddr: string = await ctr.owner();
-      setOwner(ownerAddr.toLowerCase());
-    } catch (err) {
-      console.error("Failed to connect wallet:", err);
-      alert("Connection failed. Check console for details.");
-    }
+    const ctr = new ethers.Contract(TIPJAR_ADDRESS, TIPJAR_ABI, sig);
+    setContract(ctr);
+    const ownerAddr: string = await ctr.owner();
+    setOwner(ownerAddr.toLowerCase());
   };
 
-  // 2. Fetch all tips
   const loadTips = async () => {
     if (!contract) return;
-    const raw: any[] = await contract.getAllTips();
-    const parsed = raw.map((t) => ({
+    const raw = await contract.getAllTips();
+    setTips(raw.map((t: any) => ({
       from: t.from,
       amount: ethers.formatEther(t.amount) + " ETH",
       message: t.message,
       timestamp: Number(t.timestamp),
-    }));
-    setTips(parsed);
+    })));
   };
 
-  // 3. Send a tip
   const sendTip = async () => {
     if (!contract || !msgInput) return;
-    const tx = await contract.sendTip(msgInput, {
-      value: ethers.parseEther("0.001"),
-    });
+    const tx = await contract.sendTip(msgInput, { value: ethers.parseEther("0.001") });
     await tx.wait();
     setMsgInput("");
     loadTips();
   };
 
-  // 4. Withdraw (owner only)
   const withdraw = async () => {
     if (!contract) return;
     const tx = await contract.withdraw();
@@ -93,53 +65,66 @@ export default function Home() {
     alert("Withdrawn!");
   };
 
-  // Load tips whenever the contract is set
   useEffect(() => {
-    if (contract) {
-      loadTips();
-    }
+    if (contract) loadTips();
   }, [contract]);
 
   return (
-    <div style={{ padding: 20 }}>
+    <div className="w-full max-w-2xl bg-white rounded-lg shadow p-6 space-y-6">
       {!account ? (
-        <button onClick={connectWallet}>Connect MetaMask</button>
+        <button
+          onClick={connectWallet}
+          className="w-full py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+        >
+          Connect MetaMask
+        </button>
       ) : (
         <>
-          <div>Connected as: {account}</div>
+          <div className="text-sm text-gray-600">Connected as <span className="font-mono">{account}</span></div>
 
-          <h2>Leave a Tip</h2>
-          <input
-            value={msgInput}
-            onChange={(e) => setMsgInput(e.target.value)}
-            placeholder="Your message"
-          />
-          <button onClick={sendTip} style={{ marginLeft: 8 }}>
-            Tip 0.001 ETH
-          </button>
+          {/* Tip Form */}
+          <div className="space-y-2">
+            <label className="block text-gray-700">Your Message</label>
+            <input
+              value={msgInput}
+              onChange={(e) => setMsgInput(e.target.value)}
+              placeholder="Say something nice…"
+              className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button
+              onClick={sendTip}
+              className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition"
+            >
+              Tip 0.001 ETH
+            </button>
+          </div>
 
-          <h2 style={{ marginTop: 24 }}>All Tips</h2>
-          <ul>
-            {tips.map((t, i) => (
-              <li key={i} style={{ marginBottom: 12 }}>
-                <strong>{t.from}</strong> tipped <em>{t.amount}</em> at{" "}
-                {new Date(t.timestamp * 1000).toLocaleString()} saying “
-                {t.message}”
-              </li>
-            ))}
-          </ul>
+          {/* Tips List */}
+          <div>
+            <h2 className="text-lg font-medium mb-2">All Tips</h2>
+            <ul className="space-y-4">
+              {tips.map((t, i) => (
+                <li key={i} className="p-4 border border-gray-200 rounded">
+                  <div className="text-xs text-gray-500 mb-1">
+                    {new Date(t.timestamp * 1000).toLocaleString()}
+                  </div>
+                  <div className="font-mono text-sm mb-1">{t.from}</div>
+                  <div className="text-sm mb-2">{t.message}</div>
+                  <div className="text-sm font-semibold">{t.amount}</div>
+                </li>
+              ))}
+            </ul>
+          </div>
 
-          {/* Show withdraw only if you're the on‑chain owner */}
-          {account &&
-            owner &&
-            account.toLowerCase() === owner && (
-              <button
-                onClick={withdraw}
-                style={{ marginTop: 20, background: "#f44336", color: "#fff" }}
-              >
-                Withdraw All
-              </button>
-            )}
+          {/* Withdraw Button */}
+          {account && owner && account.toLowerCase() === owner && (
+            <button
+              onClick={withdraw}
+              className="w-full py-2 bg-red-600 text-white rounded hover:bg-red-700 transition"
+            >
+              Withdraw All
+            </button>
+          )}
         </>
       )}
     </div>

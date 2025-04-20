@@ -1,10 +1,10 @@
-// pages/_app.tsx
+// src/pages/_app.tsx
+import "../styles/globals.css";    // <-- here
 import type { AppProps } from "next/app";
-import "../styles/globals.css" // adjust path if you use a different styles folder
 
 export default function MyApp({ Component, pageProps }: AppProps) {
   return (
-    <main>
+    <main className="min-h-screen flex flex-col items-center p-6">
       <Component {...pageProps} />
     </main>
   );
