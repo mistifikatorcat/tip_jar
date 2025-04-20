@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+// pages/index.tsx
+
+import React, { useEffect, useState } from "react";
 import { ethers } from "ethers";
 import { TIPJAR_ADDRESS, TIPJAR_ABI } from "../utils/TipJar";
-import React from "react";
 
 type Tip = {
   from: string;
@@ -15,25 +16,49 @@ export default function Home() {
   const [signer, setSigner] = useState<ethers.JsonRpcSigner>();
   const [contract, setContract] = useState<ethers.Contract>();
   const [account, setAccount] = useState<string>();
+  const [owner, setOwner] = useState<string>();
   const [tips, setTips] = useState<Tip[]>([]);
   const [msgInput, setMsgInput] = useState("");
 
-  
-
   // 1. Connect MetaMask
   const connectWallet = async () => {
-    if (!window.ethereum) return alert("Install MetaMask!");
-    const prov = new ethers.BrowserProvider(window.ethereum);
-    await prov.send("eth_requestAccounts", []);
-    const sig = await prov.getSigner();
-    const addr = await sig.getAddress();
-    setProvider(prov);
-    setSigner(sig);
-    setAccount(addr);
+    try {
+      const { ethereum } = window as any;
+      if (!ethereum) {
+        alert("Please install MetaMask");
+        return;
+      }
 
-    // instantiate contract
-    const ctr = new ethers.Contract(TIPJAR_ADDRESS, TIPJAR_ABI, sig);
-    setContract(ctr);
+      // Request the user's accounts
+      const accounts: string[] = await ethereum.request({
+        method: "eth_requestAccounts",
+      });
+      if (accounts.length === 0) {
+        console.log("No accounts found");
+        return;
+      }
+      const userAddress = accounts[0];
+      setAccount(userAddress);
+
+      // Create an Ethers provider that doesn't enforce a specific network
+      const prov = new ethers.BrowserProvider(ethereum, "any");
+      setProvider(prov);
+
+      // Explicitly get the signer for that address
+      const sig = await prov.getSigner(userAddress);
+      setSigner(sig);
+
+      // Instantiate the contract with the signer
+      const ctr = new ethers.Contract(TIPJAR_ADDRESS, TIPJAR_ABI, sig);
+      setContract(ctr);
+
+      // Fetch and store the owner address
+      const ownerAddr: string = await ctr.owner();
+      setOwner(ownerAddr.toLowerCase());
+    } catch (err) {
+      console.error("Failed to connect wallet:", err);
+      alert("Connection failed. Check console for details.");
+    }
   };
 
   // 2. Fetch all tips
@@ -52,13 +77,15 @@ export default function Home() {
   // 3. Send a tip
   const sendTip = async () => {
     if (!contract || !msgInput) return;
-    const tx = await contract.sendTip(msgInput, { value: ethers.parseEther("0.001") });
+    const tx = await contract.sendTip(msgInput, {
+      value: ethers.parseEther("0.001"),
+    });
     await tx.wait();
     setMsgInput("");
     loadTips();
   };
 
-  // 4. If owner, withdraw
+  // 4. Withdraw (owner only)
   const withdraw = async () => {
     if (!contract) return;
     const tx = await contract.withdraw();
@@ -66,9 +93,11 @@ export default function Home() {
     alert("Withdrawn!");
   };
 
-  // on contract ready, load tips
+  // Load tips whenever the contract is set
   useEffect(() => {
-    if (contract) loadTips();
+    if (contract) {
+      loadTips();
+    }
   }, [contract]);
 
   return (
@@ -85,24 +114,32 @@ export default function Home() {
             onChange={(e) => setMsgInput(e.target.value)}
             placeholder="Your message"
           />
-          <button onClick={sendTip}>Tip 0.001 ETH</button>
+          <button onClick={sendTip} style={{ marginLeft: 8 }}>
+            Tip 0.001 ETH
+          </button>
 
-          <h2>All Tips</h2>
+          <h2 style={{ marginTop: 24 }}>All Tips</h2>
           <ul>
             {tips.map((t, i) => (
-              <li key={i}>
+              <li key={i} style={{ marginBottom: 12 }}>
                 <strong>{t.from}</strong> tipped <em>{t.amount}</em> at{" "}
-                {new Date(t.timestamp * 1000).toLocaleString()} saying “{t.message}”
+                {new Date(t.timestamp * 1000).toLocaleString()} saying “
+                {t.message}”
               </li>
             ))}
           </ul>
 
-          {/* Show withdraw only if you’re the owner */}
-          {account && account.toLowerCase() === process.env.NEXT_PUBLIC_CONTRACT_ADDRESS?.toLowerCase() && (
-            <button onClick={withdraw} style={{ marginTop: 20 }}>
-              Withdraw All
-            </button>
-          )}
+          {/* Show withdraw only if you're the on‑chain owner */}
+          {account &&
+            owner &&
+            account.toLowerCase() === owner && (
+              <button
+                onClick={withdraw}
+                style={{ marginTop: 20, background: "#f44336", color: "#fff" }}
+              >
+                Withdraw All
+              </button>
+            )}
         </>
       )}
     </div>
