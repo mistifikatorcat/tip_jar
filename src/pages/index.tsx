@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { ethers } from "ethers";
 import { TIPJAR_ADDRESS, TIPJAR_ABI } from "../utils/TipJar";
+import { getRandomName } from "@/utils/randomName";
 
 type Tip = {
   from: string;
@@ -80,7 +81,7 @@ export default function Home() {
         </button>
       ) : (
         <>
-          <div className="text-sm text-gray-600">Connected as <span className="font-mono">{account}</span></div>
+          <div className="text-sm text-gray-600">Connected as <span className="font-mono">{getRandomName(account)}</span></div>
 
           {/* Tip Form */}
           <div className="space-y-2">
@@ -108,7 +109,7 @@ export default function Home() {
                   <div className="text-xs text-gray-500 mb-1">
                     {new Date(t.timestamp * 1000).toLocaleString()}
                   </div>
-                  <div className="font-mono text-sm mb-1">{t.from}</div>
+                  <div className="font-mono text-sm mb-1">{getRandomName(t.from)}</div>
                   <div className="text-sm mb-2">{t.message}</div>
                   <div className="text-sm font-semibold">{t.amount}</div>
                 </li>
